@@ -19,7 +19,7 @@
 //! [Writing a client proxy]: https://dbus2.github.io/zbus/client.html
 //! [D-Bus standard interfaces]: https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces,
 use zbus::proxy;
-#[proxy(interface = "org.bluez.Media1", assume_defaults = true)]
+#[proxy(interface = "org.bluez.Media1", default_service = "org.bluez", assume_defaults = true)]
 pub trait Media1 {
     /// RegisterApplication method
     fn register_application(

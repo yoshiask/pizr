@@ -19,7 +19,7 @@
 //! [Writing a client proxy]: https://dbus2.github.io/zbus/client.html
 //! [D-Bus standard interfaces]: https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces,
 use zbus::proxy;
-#[proxy(interface = "org.bluez.NetworkServer1", assume_defaults = true)]
+#[proxy(interface = "org.bluez.NetworkServer1", default_service = "org.bluez", assume_defaults = true)]
 pub trait NetworkServer1 {
     /// Register method
     fn register(&self, uuid: &str, bridge: &str) -> zbus::Result<()>;

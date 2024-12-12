@@ -19,7 +19,7 @@
 //! [Writing a client proxy]: https://dbus2.github.io/zbus/client.html
 //! [D-Bus standard interfaces]: https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces,
 use zbus::proxy;
-#[proxy(interface = "org.bluez.Adapter1", default_service = "org.zbus", assume_defaults = true)]
+#[proxy(interface = "org.bluez.Adapter1", default_service = "org.bluez", assume_defaults = true)]
 pub trait Adapter1 {
     /// GetDiscoveryFilters method
     fn get_discovery_filters(&self) -> zbus::Result<Vec<String>>;
