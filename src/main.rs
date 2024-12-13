@@ -3,24 +3,29 @@
 use std::collections::HashMap;
 use std::error::Error;
 
-use zbus::{zvariant::Value, proxy, Connection, fdo::ObjectManagerProxy, ObjectServer};
-use zbus::fdo::{ManagedObjects, ObjectManager};
+use zbus::{zvariant::Value, proxy, Connection, ObjectServer};
+use zbus::fdo::{ManagedObjects, ObjectManager, IntrospectableProxy};
 
 // Although we use `tokio` here, you can use any async runtime of choice.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let connection = Connection::system().await?;
-    let object_manager = ObjectManagerProxy::builder(&connection)
+
+    let bluez_intro = IntrospectableProxy::builder(&connection)
         .path("/org/bluez")?
-	.destination("org.bluez")?
+	    .destination("org.bluez")?
         .build()
         .await?;
-    println!("Built object manager");
+    println!("Built bluez");
 
-    let managed_objects = object_manager.get_managed_objects().await?;
-    for object_path in managed_objects.keys() {
-        println!("Managed object: {}", object_path);
-    }
+    let bluez_introspection = bluez_intro.introspect().await?;
+    println!("Introspection:");
+    println!("{}", bluez_introspection);
+
+    // let managed_objects = bluez_intro.introspect().await?;
+    // for object_path in managed_objects.keys() {
+    //     println!("Managed object: {}", object_path);
+    // }
 
     Ok(())
 
