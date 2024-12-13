@@ -2,7 +2,7 @@
 #[path = "../introspections/org.bluez/bluez.rs"] mod bluez;
 
 use std::error::Error;
-
+use std::ops::Add;
 use zbus::{Connection};
 use zbus::export::futures_util::{pin_mut, select, StreamExt};
 use zbus::fdo::{ObjectManager, ObjectManagerProxy};
@@ -59,9 +59,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await?;
 
     let mut added_interfaces_stream = objman.receive_interfaces_added().await?;
+    let hci0_path_prefix = hci0_path.add("/").as_str();
     let added_devices_stream = added_interfaces_stream.filter_map(move |signal| async move {
         let args = signal.args().ok()?;
-        return if args.object_path.starts_with(concat!(hci0_path, "/")) {
+        return if args.object_path.starts_with(hci0_path_prefix) {
             let device = args.interfaces_and_properties.get("org.bluez.Device1")?;
             let address: String = device.get("Address")?.try_into().ok()?;
             Some(address)
@@ -90,37 +91,4 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // }
 
     Ok(())
-}
-
-pub async fn stream_device_events<'b>(&'b self) -> zbus::Result<impl futures_util::Stream<Item = DiscoveredDeviceEvent> + 'b> {
-    let added_objects = self.object_manager.receive_interfaces_added().await?;
-    let removed_objects = self.object_manager.receive_interfaces_removed().await?;
-
-    let added_devices = added_objects.filter_map(move |signal: InterfacesAdded| async move {
-        let args = signal.args().ok()?;
-        if self.is_device_path(&args.object_path) {
-            let device = args.interfaces_and_properties.get("org.bluez.Device1")?;
-            let address: String = device.get("Address")?.try_into().ok()?;
-            let services = Vec::<_>::try_from(device.get("UUIDs")?.try_to_owned().unwrap()).ok()?.into_iter().collect();
-            let connected: bool = device.get("Connected")?.try_into().ok()?;
-            let rssi: Option<i16> = device.get("RSSI").and_then(|v| v.try_into().ok());
-            Some(DiscoveredDeviceEvent::DeviceAdded(DiscoveredDevice {
-                path: args.object_path.into(),
-                address,
-                services,
-                connected,
-                rssi
-            }))
-        } else { None }
-    });
-
-    let removed_devices = removed_objects.filter_map(move |signal| async move {
-        let args = signal.args().ok()?;
-        // if this is a device, and one of the removed interfaces was Device1
-        if self.is_device_path(&args.object_path) && args.interfaces.contains(&"org.bluez.Device1") {
-            Some(DiscoveredDeviceEvent::DeviceRemoved(args.object_path.into()))
-        } else { None }
-    });
-
-    Ok(select(added_devices, removed_devices))
 }
