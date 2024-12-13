@@ -34,5 +34,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let controller_name = hci0.name().await?;
     println!("Controller: {}", controller_name);
 
+    let controller_powered = hci0.powered().await?;
+    println!("Powered?: {}", controller_powered);
+
+    hci0.set_powered(true).await?;
+    if hci0.powered().await? {
+        println!("Successfully powered hci0");
+    }
+    else {
+        println!("Failed to power on hci0");
+    }
+    hci0.set_powered(false).await?;
+
     Ok(())
 }
