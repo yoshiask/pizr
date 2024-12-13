@@ -4,8 +4,8 @@
 use std::error::Error;
 use std::ops::Add;
 use zbus::{Connection};
-use zbus::export::futures_util::{pin_mut, select, StreamExt};
-use zbus::fdo::{ObjectManager, ObjectManagerProxy};
+use zbus::export::futures_util::{pin_mut, StreamExt};
+use zbus::fdo::{ObjectManagerProxy};
 use crate::bluez::{BLUEZ_PATH_ROOT, BLUEZ_SERVICE};
 
 // Although we use `tokio` here, you can use any async runtime of choice.
@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let hci0 = adapter1::Adapter1Proxy::builder(&connection)
         .destination(BLUEZ_SERVICE)?
         .interface(format!("{}.{}", BLUEZ_SERVICE, "Adapter1"))?
-        .path(hci0_path)?
+        .path(hci0_path.as_str())?
         .build()
         .await?;
 
@@ -58,11 +58,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .build()
         .await?;
 
-    let mut added_interfaces_stream = objman.receive_interfaces_added().await?;
-    let hci0_path_prefix = format!("{}/", hci0_path);
+    let hci0_path_prefix = format!("{hci0_path}/");
+    let hci0_path_prefix_str = hci0_path_prefix.as_str();
+    let added_interfaces_stream = objman.receive_interfaces_added().await?;
     let added_devices_stream = added_interfaces_stream.filter_map(move |signal| async move {
         let args = signal.args().ok()?;
-        return if args.object_path.starts_with(hci0_path_prefix) {
+        return if args.object_path.starts_with(hci0_path_prefix_str) {
             let device = args.interfaces_and_properties.get("org.bluez.Device1")?;
             let address: String = device.get("Address")?.try_into().ok()?;
             Some(address)
