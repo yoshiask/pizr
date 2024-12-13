@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await?;
 
     let mut added_interfaces_stream = objman.receive_interfaces_added().await?;
-    let hci0_path_prefix = hci0_path.add("/").as_str();
+    let hci0_path_prefix = format!("{}/", hci0_path);
     let added_devices_stream = added_interfaces_stream.filter_map(move |signal| async move {
         let args = signal.args().ok()?;
         return if args.object_path.starts_with(hci0_path_prefix) {
