@@ -21,11 +21,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let bluez_introspection = bluez_intro.introspect().await?;
     println!("Introspection:");
     println!("{}", bluez_introspection);
+    println!();
 
-    // let managed_objects = bluez_intro.introspect().await?;
-    // for object_path in managed_objects.keys() {
-    //     println!("Managed object: {}", object_path);
-    // }
+    let hci0 = adapter1::Adapter1Proxy::builder(&connection)
+        .interface("org.bluez")?
+        .path("/org/bluez/hci0")?
+        .build()
+        .await?;
+
+    let controller_name = hci0.name().await?;
+    println!("Controller: {}", controller_name);
 
     Ok(())
 
