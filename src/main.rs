@@ -24,7 +24,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!();
 
     let hci0 = adapter1::Adapter1Proxy::builder(&connection)
-        .interface("org.bluez")?
+        .destination("org.bluez")?
+        .interface("org.bluez.Adapter1")?
         .path("/org/bluez/hci0")?
         .build()
         .await?;
