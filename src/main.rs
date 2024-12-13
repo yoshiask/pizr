@@ -36,6 +36,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if !controller_discoverable {
         // Make device discoverable
         hci0.set_discoverable(true).await?;
+        hci0.set_pairable(true).await?;
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
         if hci0.discoverable().await? {
@@ -46,6 +47,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
             return Err(Box::from("Failed make hci0 discoverable"));
         }
     }
+
+    // let controller_scan = hci0.discovering().await?;
+    // if !controller_scan {
+    //     // Start scanning for devices
+    //     hci0.start_discovery().await?;
+    //     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    //
+    //     if hci0.discovering().await? {
+    //         println!("Searching for devices...");
+    //     }
+    //     else {
+    //         return Err(Box::from("Failed to scan for devices"));
+    //     }
+    // }
 
     Ok(())
 }
