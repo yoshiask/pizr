@@ -18,21 +18,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .build()
         .await?;
 
-    let controller_name = hci0.name().await?;
-    println!("Controller: {}", controller_name);
-
     let controller_powered = hci0.powered().await?;
     println!("Powered?: {}", controller_powered);
 
     // Power on BT controller
     hci0.set_powered(true).await?;
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
     if hci0.powered().await? {
         println!("Successfully powered hci0");
     }
     else {
         println!("Failed to power on hci0");
+    }
+
+    // Make device discoverable
+    hci0.set_discoverable(true).await?;
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+    if hci0.discoverable().await? {
+        let controller_name = hci0.name().await?;
+        println!("pizr is discoverable as '{}'", controller_name);
+    }
+    else {
+        println!("Failed make hci0 discoverable");
     }
 
     Ok(())
