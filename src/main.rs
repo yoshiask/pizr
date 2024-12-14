@@ -2,10 +2,11 @@
 #[path = "../introspections/org.bluez/bluez.rs"] mod bluez;
 
 use std::error::Error;
-use std::ops::Add;
 use zbus::{Connection};
 use zbus::export::futures_util::{pin_mut, StreamExt};
 use zbus::fdo::{ObjectManagerProxy};
+use zbus::names::BusName;
+use zbus::zvariant::NoneValue;
 use crate::bluez::{BLUEZ_PATH_ROOT, BLUEZ_SERVICE};
 
 // Although we use `tokio` here, you can use any async runtime of choice.
@@ -54,6 +55,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Listen for new devices
     let objman = ObjectManagerProxy::builder(&connection)
+        .destination(BusName::null_value())?
         .interface("org.freedesktop.DBus.ObjectManager")?
         .build()
         .await?;
