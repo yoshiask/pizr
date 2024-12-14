@@ -108,8 +108,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .build()
         .await?;
 
-    let device_name = device.name().await?;
+    let device_name = device.alias().await?;
     println!("Device '{device_name}' is available");
+
+    let mut device_connected = device.connected().await?;
+    if !device_connected {
+        device.connected().await?;
+
+        device_connected = device.connected().await?;
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+        if !device_connected {
+            return Err(Box::from(format!("Failed to connect to '{device_name}'")));
+        }
+    }
+    println!("Connected to '{device_name}'");
 
     let player = mediacontrol1::MediaControl1Proxy::builder(&connection)
         .destination(BLUEZ_SERVICE)?
