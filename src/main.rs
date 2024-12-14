@@ -1,5 +1,6 @@
 #[path = "../introspections/org.bluez/adapter1.rs"] mod adapter1;
 #[path = "../introspections/org.bluez/device1.rs"] mod device1;
+#[path = "../introspections/org.bluez/media_control1.rs"] mod mediacontrol1;
 #[path = "../introspections/org.bluez/bluez.rs"] mod bluez;
 
 use std::error::Error;
@@ -109,6 +110,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let device_name = device.name().await?;
     println!("Device '{device_name}' is available");
+
+    let player = mediacontrol1::MediaControl1Proxy::builder(&connection)
+        .destination(BLUEZ_SERVICE)?
+        .interface(format!("{}.{}", BLUEZ_SERVICE, "MediaControl1"))?
+        .path(device_path_str.as_str())?
+        .build()
+        .await?;
+
+    if player.connected().await? {
+        println!("Player is connected");
+        player.play().await?;
+        println!("Playing music!");
+    } else {
+        println!("Player is disconnected");
+    }
+
 
     // let controller_scan = hci0.discovering().await?;
     // if !controller_scan {
