@@ -27,12 +27,14 @@ pub trait Device1 {
     /// Connect method
     fn connect(&self) -> zbus::Result<()>;
 
+    #[allow(non_snake_case)]
     /// ConnectProfile method
     fn connect_profile(&self, UUID: &str) -> zbus::Result<()>;
 
     /// Disconnect method
     fn disconnect(&self) -> zbus::Result<()>;
 
+    #[allow(non_snake_case)]
     /// DisconnectProfile method
     fn disconnect_profile(&self, UUID: &str) -> zbus::Result<()>;
 
