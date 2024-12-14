@@ -75,8 +75,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         device_path = Some(bluez_obj_path.into());
     }
 
-    if device_path.is_some() {
+    if !device_path.is_some() {
         // Listen for new devices
+        println!("No devices found, waiting to pair...");
+
         let hci0_path_prefix_str = hci0_path_prefix.as_str();
         let added_interfaces_stream = objman.receive_interfaces_added().await?;
         let added_devices_stream = added_interfaces_stream.filter_map(move |signal| async move {
