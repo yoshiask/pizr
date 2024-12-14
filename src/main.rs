@@ -6,8 +6,7 @@ use std::error::Error;
 use zbus::{Connection};
 use zbus::export::futures_util::{pin_mut, StreamExt};
 use zbus::fdo::{ObjectManagerProxy};
-use zbus::names::BusName;
-use zbus::zvariant::{NoneValue, ObjectPath};
+use zbus::zvariant::{ObjectPath};
 use crate::bluez::{BLUEZ_PATH_ROOT, BLUEZ_SERVICE};
 
 // Although we use `tokio` here, you can use any async runtime of choice.
@@ -98,10 +97,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Get device instance
+    let device_path_str = device_path.unwrap();
     let device = device1::Device1Proxy::builder(&connection)
         .destination(BLUEZ_SERVICE)?
         .interface(format!("{}.{}", BLUEZ_SERVICE, "Device1"))?
-        .path(device_path.unwrap().as_str())?
+        .path(device_path_str.as_str())?
         .build()
         .await?;
 
