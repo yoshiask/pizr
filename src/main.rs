@@ -4,6 +4,7 @@
 #[path = "../introspections/org.bluez/bluez.rs"] mod bluez;
 
 use std::error::Error;
+use std::str::FromStr;
 use regex::Regex;
 use zbus::{Connection};
 use zbus::export::futures_util::{pin_mut, StreamExt};
@@ -11,16 +12,26 @@ use zbus::fdo::{ObjectManagerProxy};
 use zbus::zvariant::{ObjectPath};
 use crate::bluez::{BLUEZ_PATH_ROOT, BLUEZ_SERVICE};
 
+fn input<T: FromStr>() -> Result<T, <T as FromStr>::Err> {
+    let mut input: String = String::with_capacity(64); 
+    
+    std::io::stdin()
+    .read_line(&mut input)
+    .expect("Input could not be read");
+    
+    input.parse()
+}
+
 // Although we use `tokio` here, you can use any async runtime of choice.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let connection = Connection::system().await?;
 
-    let hci0_path = format!("{}/{}", BLUEZ_PATH_ROOT, "hci0");
+    let hci0_path = format!("{BLUEZ_PATH_ROOT}/hci0");
 
     let hci0 = adapter1::Adapter1Proxy::builder(&connection)
         .destination(BLUEZ_SERVICE)?
-        .interface(format!("{}.{}", BLUEZ_SERVICE, "Adapter1"))?
+        .interface(format!("{BLUEZ_SERVICE}.Adapter1"))?
         .path(hci0_path.as_str())?
         .build()
         .await?;
@@ -48,7 +59,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         if hci0.discoverable().await? {
             let controller_name = hci0.name().await?;
-            println!("pizr is discoverable as '{}'", controller_name);
+            println!("pizr is discoverable as '{controller_name}'");
         }
         else {
             return Err(Box::from("Failed make hci0 discoverable"));
@@ -111,7 +122,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let device_path_str = device_path.unwrap();
     let device = device1::Device1Proxy::builder(&connection)
         .destination(BLUEZ_SERVICE)?
-        .interface(format!("{}.{}", BLUEZ_SERVICE, "Device1"))?
+        .interface(format!("{BLUEZ_SERVICE}.Device1"))?
         .path(device_path_str.as_str())?
         .build()
         .await?;
@@ -134,7 +145,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let player = mediacontrol1::MediaControl1Proxy::builder(&connection)
         .destination(BLUEZ_SERVICE)?
-        .interface(format!("{}.{}", BLUEZ_SERVICE, "MediaControl1"))?
+        .interface(format!("{BLUEZ_SERVICE}.MediaControl1",))?
         .path(device_path_str.as_str())?
         .build()
         .await?;
@@ -146,21 +157,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     } else {
         println!("Player is disconnected");
     }
-
-
-    // let controller_scan = hci0.discovering().await?;
-    // if !controller_scan {
-    //     // Start scanning for devices
-    //     hci0.start_discovery().await?;
-    //     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-    //
-    //     if hci0.discovering().await? {
-    //         println!("Searching for devices...");
-    //     }
-    //     else {
-    //         return Err(Box::from("Failed to scan for devices"));
-    //     }
-    // }
 
     Ok(())
 }
