@@ -4,6 +4,7 @@
 #[path = "../introspections/org.bluez/bluez.rs"] mod bluez;
 
 use std::error::Error;
+use regex::Regex;
 use zbus::{Connection};
 use zbus::export::futures_util::{pin_mut, StreamExt};
 use zbus::fdo::{ObjectManagerProxy};
@@ -62,13 +63,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .build()
         .await?;
 
+    // Regex to match only immediate children of hci0, which should be devices
+    let hci0_path_pattern = format!("^{hci0_path}/([^/]+)$");
+    let hci0_path_re = Regex::new(hci0_path_pattern.as_str()).unwrap();
+
     // Check for existing paired devices
     let mut device_path: Option<ObjectPath> = None;
-    let hci0_path_prefix = format!("{hci0_path}/");
     let bluez_objects = objman.get_managed_objects().await?;
     for bluez_object in bluez_objects {
         let mut bluez_obj_path = bluez_object.0;
-        if !bluez_obj_path.starts_with(hci0_path_prefix.as_str()) {
+        if !hci0_path_re.is_match(bluez_obj_path.as_str()) {
             continue;
         }
 
@@ -80,15 +84,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Listen for new devices
         println!("No devices found, waiting to pair...");
 
-        let hci0_path_prefix_str = hci0_path_prefix.as_str();
         let added_interfaces_stream = objman.receive_interfaces_added().await?;
-        let added_devices_stream = added_interfaces_stream.filter_map(move |signal| async move {
+        let added_devices_stream = added_interfaces_stream.filter_map(move |signal| {
+        let hci0_path_re_onadd = hci0_path_re.clone();
+        async move {
             let args = signal.args().ok()?;
-            return if args.object_path.starts_with(hci0_path_prefix_str) {
+            return if hci0_path_re_onadd.is_match(args.object_path.as_str()) {
                 Some(args.object_path.into_owned())
             } else {
                 None
             }
+        }
         });
 
         pin_mut!(added_devices_stream);
@@ -98,6 +104,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             break;
         }
     }
+
+    println!("Found paired device: {:?}", device_path);
 
     // Get device instance
     let device_path_str = device_path.unwrap();
