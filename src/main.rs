@@ -6,6 +6,7 @@
 use std::error::Error;
 use std::str::FromStr;
 use regex::Regex;
+use zbus::names::InterfaceName;
 use zbus::{Connection};
 use zbus::export::futures_util::{pin_mut, StreamExt};
 use zbus::fdo::{ObjectManagerProxy};
@@ -20,6 +21,35 @@ fn input<T: FromStr>() -> Result<T, <T as FromStr>::Err> {
     .expect("Input could not be read");
     
     input.parse()
+}
+
+/// Waits for a matching interface to be added to the DBus object with the specified path.
+async fn wait_for_interface<'a, O, I>(objman: &ObjectManagerProxy<'a>, obj_path: O, interface_name: I) -> Result<(), Box<dyn Error>>
+    where
+        O: TryInto<ObjectPath<'a>>,
+        O::Error: Into<zbus::Error>,
+        I: TryInto<InterfaceName<'a>>,
+        I::Error: Into<zbus::Error>,
+{
+    let interface_name = &interface_name.try_into().map_err(Into::into)?;
+    let obj_path = &obj_path.try_into().map_err(Into::into)?;
+    
+    let mut added_interfaces_stream = objman.receive_interfaces_added().await?;
+    
+    while let Some(added_interface_path) = added_interfaces_stream.next().await {
+        // Ignore interfaces on objects we don't care about
+        if added_interface_path.args()?.object_path() != obj_path {
+            continue;
+        }
+
+        // Check for the interface we need
+        if added_interface_path.args()?.interfaces_and_properties().contains_key(interface_name) {
+            return Ok(());
+        }
+    }
+
+    // Should never get here
+    Err(Box::from("Interface not added"))
 }
 
 // Although we use `tokio` here, you can use any async runtime of choice.
@@ -119,44 +149,53 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Found paired device: {:?}", device_path);
 
     // Get device instance
-    let device_path_str = device_path.unwrap();
+    let device_path = device_path.unwrap();
     let device = device1::Device1Proxy::builder(&connection)
         .destination(BLUEZ_SERVICE)?
         .interface(format!("{BLUEZ_SERVICE}.Device1"))?
-        .path(device_path_str.as_str())?
+        .path(device_path.clone())? // Clone because device proxy takes ownership
         .build()
         .await?;
 
     let device_name = device.alias().await?;
     println!("Device '{device_name}' is available");
 
-    let mut device_connected = device.connected().await?;
+    let device_connected = device.connected().await?;
     if !device_connected {
-        device.connected().await?;
-
-        device_connected = device.connected().await?;
+        device.connect().await?;
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+        let device_connected = device.connected().await
+            .unwrap_or(false);
 
         if !device_connected {
             return Err(Box::from(format!("Failed to connect to '{device_name}'")));
         }
     }
+
     println!("Connected to '{device_name}'");
 
-    let player = mediacontrol1::MediaControl1Proxy::builder(&connection)
+    // TODO: Check if interface is already available before waiting
+    println!("Waiting for MediaControl1 interface...");
+    wait_for_interface(&objman, &device_path, "org.bluez.MediaControl1").await?;
+    println!("Got interface!");
+
+    let media_control = mediacontrol1::MediaControl1Proxy::builder(&connection)
         .destination(BLUEZ_SERVICE)?
         .interface(format!("{BLUEZ_SERVICE}.MediaControl1",))?
-        .path(device_path_str.as_str())?
+        .path(device_path)?
         .build()
         .await?;
 
-    if player.connected().await? {
-        println!("Player is connected");
-        player.play().await?;
-        println!("Playing music!");
-    } else {
-        println!("Player is disconnected");
+    // Wait for media controller to connect
+    while !media_control.connected().await? {
+        println!("Waiting for media controller to connect...");
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
     }
+
+    println!("Player is connected");
+    media_control.play().await?;
+    println!("Playing music!");
 
     Ok(())
 }
