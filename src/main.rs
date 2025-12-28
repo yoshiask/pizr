@@ -6,6 +6,8 @@
 #[path = "../introspections/org.bluez/transfer1.rs"] mod transfer1;
 #[path = "../introspections/org.bluez/bluez.rs"] mod bluez;
 
+#[path = "usercontact.rs"] mod usercontact;
+
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::{self, Write};
@@ -254,6 +256,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
     }
+
+    // Read and parse vCard file
+    let vcard = usercontact::parse_vcard_from_file(vcard_transfer.filename().await?.as_str())
+        .ok_or("Failed to parse vCard")?;
+
+    println!("Read contact information for {}", vcard.formatted_name.unwrap());
 
     // Get all contacts
     // let pb_favorites = pb_access.list(HashMap::new()).await?;
