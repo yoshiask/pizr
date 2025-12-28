@@ -225,14 +225,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // See options in https://github.com/RadiusNetworks/bluez/blob/master/doc/obex-api.txt#L331
     pb_access.select("int", "pb").await?;
 
-    let pb_search_results = pb_access.search("name", "Ⲙⲁⲣⲏⲛⲁ", HashMap::new()).await?;
+    print!("Name? ");
+    io::stdout().flush()?;
+    let query = input::<String>()?;
+
+    let pb_search_results = pb_access.search("name", &query, HashMap::new()).await?;
     let selected_pb_entry = pb_search_results.first()
         .ok_or("No contacts found")?;
     println!("Found contact: {} - {}", selected_pb_entry.0, selected_pb_entry.1);
-
-    print!("Download? [Y]");
-    io::stdout().flush()?;
-    let _ = input::<String>();
 
     // Target must be an absolute path
     let select_contact_vcard = pb_access.pull(&selected_pb_entry.0, "/home/yoshiask/Downloads/test.vcf", HashMap::new()).await?;
@@ -261,7 +261,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let vcard = usercontact::parse_vcard_from_file(vcard_transfer.filename().await?.as_str())
         .ok_or("Failed to parse vCard")?;
 
-    println!("Read contact information for {}", vcard.formatted_name.unwrap());
+    println!("    {}", vcard.formatted_name.unwrap());
+
+    if let Some(preferred_tel) = vcard.perferred_tel {
+        println!("    Preferred phone number: {}", preferred_tel);
+    }
+    
+    if let Some(preferred_email) = vcard.perferred_email {
+        println!("    Preferred email: {}", preferred_email);
+    }
 
     // Get all contacts
     // let pb_favorites = pb_access.list(HashMap::new()).await?;
