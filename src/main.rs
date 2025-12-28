@@ -1,9 +1,14 @@
 #[path = "../introspections/org.bluez/adapter1.rs"] mod adapter1;
 #[path = "../introspections/org.bluez/device1.rs"] mod device1;
 #[path = "../introspections/org.bluez/media_control1.rs"] mod mediacontrol1;
+#[path = "../introspections/org.bluez/client1.rs"] mod obexclient1;
+#[path = "../introspections/org.bluez/phonebook_access1.rs"] mod phonebookaccess1;
+#[path = "../introspections/org.bluez/transfer1.rs"] mod transfer1;
 #[path = "../introspections/org.bluez/bluez.rs"] mod bluez;
 
+use std::collections::HashMap;
 use std::error::Error;
+use std::io::{self, Write};
 use std::str::FromStr;
 use regex::Regex;
 use zbus::names::InterfaceName;
@@ -11,7 +16,7 @@ use zbus::{Connection};
 use zbus::export::futures_util::{pin_mut, StreamExt};
 use zbus::fdo::{ObjectManagerProxy, PropertiesProxy};
 use zbus::zvariant::{ObjectPath};
-use crate::bluez::{BLUEZ_PATH_ROOT, BLUEZ_SERVICE};
+use crate::bluez::{BLUEZ_OBEX_PATH_ROOT, BLUEZ_OBEX_SERVICE, BLUEZ_PATH_ROOT, BLUEZ_SERVICE};
 
 fn input<T: FromStr>() -> Result<T, <T as FromStr>::Err> {
     let mut input: String = String::with_capacity(64); 
@@ -51,11 +56,11 @@ async fn wait_for_interface<'a, O, I>(connection: &Connection, obj_path: O, inte
 // Although we use `tokio` here, you can use any async runtime of choice.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let connection = Connection::system().await?;
+    let system_bus = Connection::system().await?;
 
     let hci0_path = format!("{BLUEZ_PATH_ROOT}/hci0");
 
-    let hci0 = adapter1::Adapter1Proxy::builder(&connection)
+    let hci0 = adapter1::Adapter1Proxy::builder(&system_bus)
         .destination(BLUEZ_SERVICE)?
         .interface(format!("{BLUEZ_SERVICE}.Adapter1"))?
         .path(hci0_path.as_str())?
@@ -93,7 +98,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Get an ObjectManager to get the first paired device
-    let objman = ObjectManagerProxy::builder(&connection)
+    let objman = ObjectManagerProxy::builder(&system_bus)
         .destination(BLUEZ_SERVICE)?
         .interface("org.freedesktop.DBus.ObjectManager")?
         .path("/")?
@@ -146,7 +151,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Get device instance
     let device_path = device_path.unwrap();
-    let device = device1::Device1Proxy::builder(&connection)
+    let device = device1::Device1Proxy::builder(&system_bus)
         .destination(BLUEZ_SERVICE)?
         .interface(format!("{BLUEZ_SERVICE}.Device1"))?
         .path(device_path.clone())? // Clone because device proxy takes ownership
@@ -172,10 +177,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Connected to '{device_name}'");
 
     println!("Waiting for MediaControl1 interface...");
-    wait_for_interface(&connection, &device_path, format!("{BLUEZ_SERVICE}.MediaControl1")).await?;
+    wait_for_interface(&system_bus, &device_path, format!("{BLUEZ_SERVICE}.MediaControl1")).await?;
     println!("Got interface!");
 
-    let media_control = mediacontrol1::MediaControl1Proxy::builder(&connection)
+    let media_control = mediacontrol1::MediaControl1Proxy::builder(&system_bus)
         .destination(BLUEZ_SERVICE)?
         .interface(format!("{BLUEZ_SERVICE}.MediaControl1"))?
         .path(device_path)?
@@ -189,8 +194,77 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     println!("Player is connected");
-    media_control.play().await?;
-    println!("Playing music!");
+
+    // ** OBEX-based connections ** //
+    let session_bus = Connection::session().await?;
+
+    let obex_client = obexclient1::Client1Proxy::builder(&session_bus)
+        .destination(BLUEZ_OBEX_SERVICE)?
+        .interface(format!("{BLUEZ_OBEX_SERVICE}.Client1"))?
+        .path(BLUEZ_OBEX_PATH_ROOT)?
+        .build()
+        .await?;
+
+    let obex_pbap_remote_address = device.address().await?;
+    let obex_pbap_target = zbus::zvariant::Value::from("pbap");
+    let obex_pbap_args = HashMap::from([
+        ("Target", &obex_pbap_target),
+    ]);
+    let pbap_path = obex_client.create_session(&obex_pbap_remote_address, obex_pbap_args).await?;
+
+    // Get phonebook object
+    let pb_access = phonebookaccess1::PhonebookAccess1Proxy::builder(&session_bus)
+        .destination(BLUEZ_OBEX_SERVICE)?
+        .interface(format!("{BLUEZ_OBEX_SERVICE}.PhonebookAccess1"))?
+        .path(pbap_path)?
+        .build()
+        .await?;
+
+    // See options in https://github.com/RadiusNetworks/bluez/blob/master/doc/obex-api.txt#L331
+    pb_access.select("int", "pb").await?;
+
+    let pb_search_results = pb_access.search("name", "Ⲙⲁⲣⲏⲛⲁ", HashMap::new()).await?;
+    let selected_pb_entry = pb_search_results.first()
+        .ok_or("No contacts found")?;
+    println!("Found contact: {} - {}", selected_pb_entry.0, selected_pb_entry.1);
+
+    print!("Download? [Y]");
+    io::stdout().flush()?;
+    let _ = input::<String>();
+
+    // Target must be an absolute path
+    let select_contact_vcard = pb_access.pull(&selected_pb_entry.0, "/home/yoshiask/Downloads/test.vcf", HashMap::new()).await?;
+    
+    let vcard_transfer = transfer1::Transfer1Proxy::builder(&session_bus)
+        .destination(BLUEZ_OBEX_SERVICE)?
+        .interface(format!("{BLUEZ_OBEX_SERVICE}.Transfer1"))?
+        .path(select_contact_vcard.0.clone())?
+        .build()
+        .await?;
+
+    loop {
+        let transfer_status = vcard_transfer.status().await;
+        
+        println!("{}", transfer_status.expect("Transfer error"));
+
+        if vcard_transfer.status().await? == "complete" {
+            println!("Saved to {}", vcard_transfer.filename().await?);
+            break;
+        }
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
+    }
+
+    // Get all contacts
+    // let pb_favorites = pb_access.list(HashMap::new()).await?;
+    // pb_favorites.iter().for_each(|(name, number)| {
+    //     println!("{name} - {number}");
+    // });
+
+    let _: String = input::<String>()?;
+
+    // Clean up OBEX session
+    obex_client.remove_session(pb_access.inner().path()).await?;
 
     Ok(())
 }
